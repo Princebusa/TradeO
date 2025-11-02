@@ -1,0 +1,61 @@
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String?
+  email       String   @unique
+  password    String
+  wallet      Wallet?
+  trades      Trade[]
+  createdAt   DateTime @default(now())
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Float    @default(1000) // demo credits
+  user      User     @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+}
+
+model Market {
+  id         String   @id @default(cuid())
+  title      String
+  category   String
+  yesPool    Float    @default(0)
+  noPool     Float    @default(0)
+  status     String   @default("OPEN")
+  result     String?  // YES or NO
+  trades     Trade[]
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+}
+
+model Trade {
+  id        String   @id @default(cuid())
+  userId    String
+  marketId  String
+  option    String   // YES or NO
+  amount    Float
+  user      User     @relation(fields: [userId], references: [id])
+  market    Market   @relation(fields: [marketId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model WalletTransaction {
+  id        String   @id @default(cuid())
+  walletId  String
+  type      String   // "DEPOSIT" | "TRADE" | "WITHDRAW" | "WIN"
+  amount    Float
+  wallet    Wallet   @relation(fields: [walletId], references: [id])
+  createdAt DateTime @default(now())
+}
