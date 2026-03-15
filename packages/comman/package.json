@@ -1,0 +1,17 @@
+{
+  "name": "comman",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+   "exports": {
+    ".": "./dist/index.js",
+  "./types": "./dist/types/index.js"
+   },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5",
+     "zod": "^4.1.13"
+  }
+}
