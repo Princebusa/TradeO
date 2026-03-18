@@ -2,6 +2,7 @@ import express from "express"
 import * as dotenv from 'dotenv'
 import auth from "./routes/auth.routes"
 import cors from "cors"
+import order from './routes/order.routes'
 dotenv.config();
 
 const app = express()
@@ -12,7 +13,7 @@ app.use(express.urlencoded({ extended: true }));
 
 
 app.use("/auth", auth)
-app.use("/order", )
+app.use("/order", order)
 
 app.listen(process.env.PORT, (req)=>{
     console.log(`server is running on ${process.env.PORT}`)
