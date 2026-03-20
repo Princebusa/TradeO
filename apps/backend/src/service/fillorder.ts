@@ -1,4 +1,5 @@
 import { transferLockedBalance } from "./balance.service";
+import { broadcast, sendToUser } from "../ws";
 
 export interface Order {
   id: string;
@@ -42,6 +43,11 @@ export const fillOrders = async (
       // The buyer locked funds when putting the order, we transfer those to the seller.
       await transferLockedBalance(userId, ask.userId, matchedQty * ask.price);
 
+      // Broadcast TRADE and user updates
+      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price: ask.price, quantity: matchedQty, side, timestamp: Date.now() });
+      sendToUser(userId, { type: "ORDER_FILLED", side, price: ask.price, filledQuantity: matchedQty });
+      sendToUser(ask.userId, { type: "ORDER_FILLED", orderId: ask.id, side, price: ask.price, filledQuantity: matchedQty });
+
       if (ask.quantity === 0) {
         asks.splice(i, 1);
         i--;
@@ -67,6 +73,11 @@ export const fillOrders = async (
       // Transfer from buyer (bid.userId) to seller (userId)
       // The buyer locked funds when putting their bid, we transfer those to the seller.
       await transferLockedBalance(bid.userId, userId, matchedQty * price);
+
+      // Broadcast TRADE and user updates
+      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price, quantity: matchedQty, side, timestamp: Date.now() });
+      sendToUser(bid.userId, { type: "ORDER_FILLED", orderId: bid.id, side, price, filledQuantity: matchedQty });
+      sendToUser(userId, { type: "ORDER_FILLED", side, price, filledQuantity: matchedQty });
 
       if (bid.quantity === 0) {
         bids.splice(i, 1);

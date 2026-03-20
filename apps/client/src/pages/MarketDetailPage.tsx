@@ -55,7 +55,7 @@ export const MarketDetailPage = () => {
     try {
       await fetchApi("/order", {
         method: "POST",
-        body: JSON.stringify({ side: orderSide, type: orderType, price: Number(price), quantity: Number(quantity) })
+        body: JSON.stringify({ side: orderSide, type: orderType, price: Number(price), quantity: Number(quantity), ticker: ticker })
       });
       setStatusMsg({ type: 'success', text: 'Order placed successfully!' });
     } catch (err: any) {

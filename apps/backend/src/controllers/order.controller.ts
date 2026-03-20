@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
+import { client } from "db/client";
 import { lockBalance, getBalance } from "../service/balance.service";
 import { fillOrders } from "../service/fillorder";
 import type { Order } from "../service/fillorder";
+import { broadcast } from "../ws";
 
 // Define an in-memory orderbook
 type SideBook = {
@@ -32,7 +34,7 @@ export const order = async (req: Request, res: Response): Promise<void> => {
       price?: number;
       quantity?: number;
     };
-    const ticker = "GOOGLE"; // For now hardcode or extract from params/body
+    const ticker = req.body.ticker; // For now hardcode or extract from params/body
     const userId = (req as any).userId;
 
     if (!side || !price || !type || !quantity || !userId) {
@@ -96,6 +98,14 @@ export const order = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    // Broadcast updated orderbook DEPTH
+    broadcast(`orderbook:${ticker}`, {
+      type: "DEPTH",
+      ticker,
+      bids: currentBook.bids,
+      asks: currentBook.asks
+    });
+
     res.status(200).json({ message: "Order processed", side, price, filledQuantity: quantity - remainingQty, remainingQuantity: remainingQty, userId });
   } catch (error) {
     console.error(error);
@@ -112,9 +122,48 @@ export const getOrderbook = async (req: Request, res: Response): Promise<void> =
   res.status(200).json(orderbook[ticker]);
 };
 
+export const getMarkets = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const dbMarkets = await client.market.findMany();
+    
+    if (dbMarkets.length === 0) {
+      // Return hardcoded mock if DB is empty as a fallback for the UI
+      res.status(200).json([
+        { ticker: "BTC100K", title: "Will Bitcoin hit $100k before December?", volume: "$4.5M", chance: "42%" },
+        { ticker: "USDEBT", title: "Will US Debt ceiling be raised?", volume: "$800k", chance: "99%" }
+      ]);
+      return;
+    }
+
+    const markets = dbMarkets.map(m => {
+      // Format volume
+      let volumeStr = "$0";
+      if (m.volume >= 1e6) {
+        volumeStr = `$${(m.volume / 1e6).toFixed(1)}M`;
+      } else if (m.volume >= 1e3) {
+        volumeStr = `$${(m.volume / 1e3).toFixed(1)}k`;
+      } else {
+        volumeStr = `$${m.volume.toFixed(0)}`;
+      }
+
+      return {
+        ticker: m.ticker,
+        title: m.title,
+        volume: volumeStr,
+        chance: `${Math.round(m.chance * 100)}%`
+      };
+    });
+    
+    res.status(200).json(markets);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export const getWalletBalance = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     if (!userId) {
       res.status(401).json({ error: "Unauthorized" });
       return;

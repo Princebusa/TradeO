@@ -14,7 +14,7 @@ export const useWebSocket = (topics: string[]) => {
 
   useEffect(() => {
     // Initialize WebSocket
-    ws.current = new WebSocket("ws://localhost:3000");
+    ws.current = new WebSocket("ws://localhost:3300");
 
     ws.current.onopen = () => {
       setIsConnected(true);

@@ -64,3 +64,13 @@ enum OrderType{
   BUY
   SELL
 }
+
+model Market {
+  id          String   @id @default(cuid())
+  ticker      String   @unique
+  title       String
+  volume      Float    @default(0)
+  chance      Float    @default(0.5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
