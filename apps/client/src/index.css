@@ -1,61 +1,60 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #FFDF00; /* Neo-brutalism vibrant yellow */
-  --color-secondary: #FF66A3; /* Hot pink */
-  --color-accent: #00E5FF; /* Cyan */
-  --color-success: #00E676; /* Green for YES/Buy */
-  --color-danger: #FF3D00; /* Red for NO/Sell */
-  --color-dark: #121212;
-  --color-light: #F4F4F0;
+  --color-primary: #4F46E5; /* Indigo 600 */
+  --color-secondary: #64748B; /* Slate 500 */
+  --color-accent: #F59E0B; /* Amber 500 */
+  --color-success: #10B981; /* Emerald 500 */
+  --color-danger: #F43F5E; /* Rose 500 */
+  --color-dark: #0F172A; /* Slate 900 */
+  --color-light: #F8FAFC; /* Slate 50 */
   
-  --shadow-brutal: 4px 4px 0px 0px rgba(0,0,0,1);
-  --shadow-brutal-hover: 2px 2px 0px 0px rgba(0,0,0,1);
-  --shadow-brutal-lg: 8px 8px 0px 0px rgba(0,0,0,1);
-  --border-brutal: 3px solid #000;
+  --shadow-modern: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-modern-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 body {
-  @apply bg-light text-dark font-sans;
-  background-color: #F4F4F0; /* Off-white typical for neo-brutalism or you can go full black for dark mode, but bright colors pop on light/yellow */
-  background-image: 
-    radial-gradient(#000 1px, transparent 1px);
-  background-size: 20px 20px;
+  @apply bg-light text-dark;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Base Utility Classes for Neo-Brutalism */
+/* Updated Utility Classes with Modern Styling */
 .brutal-box {
-  @apply border-[3px] border-black bg-white;
-  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
-  transition: all 0.2s ease-in-out;
+  @apply bg-white border border-slate-200 rounded-2xl;
+  box-shadow: var(--shadow-modern);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
 }
 
-.brutal-box:active {
-  box-shadow: 0px 0px 0px 0px rgba(0,0,0,1);
-  transform: translate(4px, 4px);
+.brutal-box:hover {
+  box-shadow: var(--shadow-modern-lg);
+  transform: translateY(-2px);
 }
 
 .brutal-button {
-  @apply border-[3px] border-black bg-primary text-black font-bold uppercase cursor-pointer;
-  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
-  transition: all 0.1s ease-in-out;
+  @apply bg-primary text-white font-semibold py-2 px-6 rounded-xl cursor-pointer transition-all duration-200;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .brutal-button:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+  @apply brightness-110 -translate-y-0.5;
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
 }
 
 .brutal-button:active {
-  transform: translate(4px, 4px);
-  box-shadow: 0px 0px 0px 0px rgba(0,0,0,1);
+  @apply translate-y-0 brightness-100;
 }
 
 .brutal-input {
-  @apply border-[3px] border-black p-2 bg-white font-bold outline-none;
+  @apply border border-slate-200 p-3 bg-white rounded-xl outline-none transition-all duration-200;
 }
 
 .brutal-input:focus {
-  @apply bg-yellow-100;
-  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+  @apply border-primary ring-4 ring-primary/10 bg-white;
+}
+
+/* Layout helpers */
+.glass-panel {
+  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
 }
