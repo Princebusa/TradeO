@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { TrendingUp, ArrowRight } from "lucide-react";
+import { TrendingUp, ArrowRight, BarChart3, Globe, Zap } from "lucide-react";
 import { fetchApi } from "../lib/api";
 
 type Market = { ticker: string; title: string; volume: string; chance: string };
@@ -15,47 +15,47 @@ export const MarketsPage = () => {
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-10">
-        <div>
-           <h1 className="text-4xl font-bold tracking-tight text-slate-900 mb-2">Live Markets</h1>
-           <p className="text-slate-500 font-medium">Bet on outcomes and trade opinions in real-time.</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl shadow-modern border border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-primary">
-             <TrendingUp size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Trading Volume</div>
-            <div className="text-lg font-bold text-slate-900">$1.2M+</div>
-          </div>
-        </div>
+    <div className="max-w-7xl mx-auto px-6 py-12 bg-slate-50 min-h-screen text-slate-900">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-16 gap-8">
+        <div className="space-y-4">
+           <div className="flex items-center gap-2 text-slate-500">
+              <Globe size={14} />
+              <span className="text-[10px] font-bold capitalize tracking-wide">Global Market Intelligence</span>
+           </div>
+           <h1 className="text-6xl font-black tracking-tighter text-slate-900 capitalize">Live Markets</h1>
+            </div>
+        
+       
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      {/* Markets Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {markets.map((m) => (
           <Link to={`/market/${m.ticker}`} key={m.ticker} className="block group">
-            <div className="brutal-box p-6 h-full flex flex-col justify-between hover:border-primary/30 transition-all duration-300">
-              <div>
-                <div className="flex justify-between items-start mb-6">
-                  <span className="bg-indigo-50 text-primary font-bold px-3 py-1 rounded-lg text-xs uppercase tracking-wide">
+            <div className="brutal-box p-6 bg-white flex flex-col justify-between h-[240px] transition-all duration-500 overflow-hidden relative">
+             
+              
+              <div className="relative z-10">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="bg-slate-100 border border-slate-200 text-slate-800 font-bold px-4 py-1.5 rounded-md text-[10px] capitalize tracking-wide">
                     {m.ticker}
                   </span>
-                  <span className="text-slate-400 text-xs font-semibold flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 bg-slate-200 rounded-full"></div>
-                      Vol: {m.volume}
-                  </span>
+                  <div className="flex flex-col items-end">
+                     <span className="text-[10px] font-bold text-slate-400 capitalize tracking-wide">24h Vol</span>
+                     <span className="text-sm font-mono font-bold text-slate-700">{m.volume}</span>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 leading-snug group-hover:text-primary transition-colors mb-6">{m.title}</h3>
+                <h3 className="text-2xl font-black text-slate-900 leading-[1.1] tracking-tight group-hover:text-slate-700 transition-colors mb-6 capitalize">{m.title}</h3>
               </div>
               
-              <div className="flex justify-between items-end pt-4 border-t border-slate-50">
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1">Market Chance</div>
-                  <div className="text-3xl font-black text-success tracking-tighter">{m.chance}</div>
+              <div className="flex justify-between items-end pt-6 border-t border-slate-100 relative z-10">
+                <div className="flex flex-col">
+                  <div className="text-[10px] font-bold capitalize text-slate-500 tracking-wide mb-1.5 italic">Market Probability</div>
+                  <div className="text-5xl font-black text-slate-900 tracking-tighter font-mono group-hover:scale-105 transition-transform origin-left">{m.chance}</div>
                 </div>
-                <div className="bg-slate-100 text-slate-400 p-3 rounded-xl group-hover:bg-primary group-hover:text-white group-hover:translate-x-1 transition-all">
-                  <ArrowRight size={20} />
+                <div className="w-12 h-12 bg-slate-50 border border-slate-200 text-slate-400 flex items-center justify-center rounded-xl group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all transform group-hover:rotate-45">
+                   <ArrowRight size={20} />
                 </div>
               </div>
             </div>

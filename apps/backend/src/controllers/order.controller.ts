@@ -1,55 +1,52 @@
 import type { Request, Response } from "express";
 import { client } from "db/client";
-import { lockBalance, getBalance } from "../service/balance.service";
+import { lockBalance, getBalance, releaseBalance } from "../service/balance.service";
 import { fillOrders } from "../service/fillorder";
 import type { Order } from "../service/fillorder";
 import { broadcast } from "../ws";
+import { getPositionsForUser, getTradeHistoryForUser } from "../service/tracker.service";
 
-// Define an in-memory orderbook
-type SideBook = {
-  bids: Order[]; // Sorted descending by price
-  asks: Order[]; // Sorted ascending by price
-};
-
-type TickerBook = {
-  YES: SideBook;
-  NO: SideBook;
-};
-
-// Global in-memory orderbook
-export const orderbook: Record<string, TickerBook> = {
-  GOOGLE: {
-    YES: { bids: [], asks: [] },
-    NO: { bids: [], asks: [] },
-  },
-};
+import { orderbook, getTickerBook } from "../service/orderbook.service";
 
 const generateId = () => Math.random().toString(36).substring(7);
 
+// Helper to remove order from book internally
+const removeOrderFromBook = (ticker: string, side: "YES" | "NO", orderId: string, userId: string) => {
+  const tickerBook = orderbook[ticker];
+  if (!tickerBook) return null;
+  const sideBook = tickerBook[side];
+  
+  let index = sideBook.bids.findIndex(o => o.id === orderId && o.userId === userId);
+  if (index !== -1) {
+    return sideBook.bids.splice(index, 1)[0];
+  }
+  
+  index = sideBook.asks.findIndex(o => o.id === orderId && o.userId === userId);
+  if (index !== -1) {
+    return sideBook.asks.splice(index, 1)[0];
+  }
+  
+  return null;
+};
+
 export const order = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { side, price, type, quantity } = req.body as {
+    const { side, price, type, quantity, ticker } = req.body as {
       side?: "YES" | "NO";
       type?: "BUY" | "SELL";
       price?: number;
       quantity?: number;
+      ticker?: string;
     };
-    const ticker = req.body.ticker; // For now hardcode or extract from params/body
     const userId = (req as any).userId;
 
-    if (!side || !price || !type || !quantity || !userId) {
+    if (!side || !price || !type || !quantity || !userId || !ticker) {
       res.status(400).json({ error: "Missing required fields" });
       return;
     }
 
-    if (!orderbook[ticker]) {
-      orderbook[ticker] = {
-        YES: { bids: [], asks: [] },
-        NO: { bids: [], asks: [] },
-      };
-    }
-
-    const currentBook = orderbook[ticker][side];
+    const tickerBook = getTickerBook(ticker);
+    const currentBook = tickerBook[side];
     const orderData: Order = {
       id: generateId(),
       userId,
@@ -60,11 +57,6 @@ export const order = async (req: Request, res: Response): Promise<void> => {
       ticker,
     };
 
-    // Before matching, lock the user's balance
-    // For a BUY order, cost is price * qty
-    // For a SELL order, usually you need the token. Since we don't have token balances in DB,
-    // let's assume we lock a margin of (10 - price) * qty, or for simplicity, we mock SELLs as successful.
-    // Let's enforce locks for BUYS.
     const requiredAmount = type === "BUY" ? price * quantity : 0;
     if (requiredAmount > 0) {
       try {
@@ -86,22 +78,21 @@ export const order = async (req: Request, res: Response): Promise<void> => {
       currentBook.asks
     );
 
-    // If order was not fully filled, add rest to orderbook
     if (remainingQty > 0) {
       orderData.quantity = remainingQty;
       if (type === "BUY") {
         currentBook.bids.push(orderData);
-        currentBook.bids.sort((a, b) => b.price - a.price); // Descending
+        currentBook.bids.sort((a, b) => b.price - a.price);
       } else {
         currentBook.asks.push(orderData);
-        currentBook.asks.sort((a, b) => a.price - b.price); // Ascending
+        currentBook.asks.sort((a, b) => a.price - b.price);
       }
     }
 
-    // Broadcast updated orderbook DEPTH
     broadcast(`orderbook:${ticker}`, {
       type: "DEPTH",
       ticker,
+      side,
       bids: currentBook.bids,
       asks: currentBook.asks
     });
@@ -113,13 +104,116 @@ export const order = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const cancelOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId, ticker, side } = req.body;
+    const userId = (req as any).userId;
+
+    if (!orderId || !ticker || !side || !userId) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    const cancelledOrder = removeOrderFromBook(ticker, side, orderId, userId);
+    if (!cancelledOrder) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    if (cancelledOrder.type === "BUY") {
+      await releaseBalance(userId, cancelledOrder.price * cancelledOrder.quantity);
+    }
+
+    // Broadcast update
+    const sideBook = orderbook[ticker][side as "YES" | "NO"];
+    broadcast(`orderbook:${ticker}`, {
+      type: "DEPTH",
+      ticker,
+      side,
+      bids: sideBook.bids,
+      asks: sideBook.asks
+    });
+
+    res.status(200).json({ message: "Order cancelled" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const editOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId, ticker, side, newPrice, newQuantity } = req.body;
+    const userId = (req as any).userId;
+
+    if (!orderId || !ticker || !side || !newPrice || !newQuantity || !userId) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    // 1. Cancel old order
+    const oldOrder = removeOrderFromBook(ticker, side, orderId, userId);
+    if (!oldOrder) {
+      res.status(404).json({ error: "Original order not found" });
+      return;
+    }
+
+    if (oldOrder.type === "BUY") {
+      await releaseBalance(userId, oldOrder.price * oldOrder.quantity);
+    }
+
+    // 2. Place new order (using logic from existing order function)
+    req.body.price = newPrice;
+    req.body.quantity = newQuantity;
+    req.body.type = oldOrder.type;
+    req.body.side = side;
+    req.body.ticker = ticker;
+
+    return await order(req, res);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export const getOrderbook = async (req: Request, res: Response): Promise<void> => {
-  const ticker = (req.params.ticker as string)?.toUpperCase() || "GOOGLE";
-  if (!orderbook[ticker]) {
-    res.status(404).json({ error: "Ticker not found" });
+  const ticker = (req.params.ticker as string) || "GOOGLE";
+  const tickerUpper = ticker.toUpperCase();
+  
+  // First, check if it's already in memory (try both exact and upper)
+  if (orderbook[ticker]) {
+    res.status(200).json(orderbook[ticker]);
     return;
   }
-  res.status(200).json(orderbook[ticker]);
+  if (orderbook[tickerUpper]) {
+    res.status(200).json(orderbook[tickerUpper]);
+    return;
+  }
+
+  // If not in memory, check if it exists in the database (case-insensitive)
+  try {
+    const dbMarket = await client.market.findFirst({
+      where: { 
+        ticker: {
+          equals: ticker,
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    if (!dbMarket) {
+      res.status(404).json({ error: "Ticker not found" });
+      return;
+    }
+
+    // Use the exact ticker from DB to initialize memory if needed
+    const tickerFromDb = dbMarket.ticker;
+    const tickerBook = getTickerBook(tickerFromDb);
+    res.status(200).json(tickerBook);
+  } catch (error) {
+    console.error("Error fetching market from DB:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
 export const getMarkets = async (req: Request, res: Response): Promise<void> => {
@@ -127,11 +221,8 @@ export const getMarkets = async (req: Request, res: Response): Promise<void> => 
     const dbMarkets = await client.market.findMany();
     
     if (dbMarkets.length === 0) {
-      // Return hardcoded mock if DB is empty as a fallback for the UI
-      res.status(200).json([
-        { ticker: "BTC100K", title: "Will Bitcoin hit $100k before December?", volume: "$4.5M", chance: "42%" },
-        { ticker: "USDEBT", title: "Will US Debt ceiling be raised?", volume: "$800k", chance: "99%" }
-      ]);
+    
+      res.status(200).json({message:"No markets found"});
       return;
     }
 
@@ -170,6 +261,72 @@ export const getWalletBalance = async (req: Request, res: Response): Promise<voi
     }
     const wallet = await getBalance(userId);
     res.status(200).json(wallet);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getOpenOrders = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const openOrders: Order[] = [];
+    
+    // Iterate through all tickers in the orderbook
+    Object.values(orderbook).forEach((tickerBook) => {
+      // Check YES outcome
+      tickerBook.YES.bids.forEach((order) => {
+        if (order.userId === userId) openOrders.push(order);
+      });
+      tickerBook.YES.asks.forEach((order) => {
+        if (order.userId === userId) openOrders.push(order);
+      });
+
+      // Check NO outcome
+      tickerBook.NO.bids.forEach((order) => {
+        if (order.userId === userId) openOrders.push(order);
+      });
+      tickerBook.NO.asks.forEach((order) => {
+        if (order.userId === userId) openOrders.push(order);
+      });
+    });
+
+    res.status(200).json(openOrders);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getPositions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const positions = getPositionsForUser(userId);
+    res.status(200).json(positions);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getTradeHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const history = getTradeHistoryForUser(userId);
+    res.status(200).json(history);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });

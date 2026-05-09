@@ -7,14 +7,18 @@ import { MarketsPage } from './pages/MarketsPage';
 import { MarketDetailPage } from './pages/MarketDetailPage';
 import './index.css';
 
-const AppLayout = ({ children }: { children: React.ReactNode }) => (
-  <div className="min-h-screen p-4 md:p-8">
-    <Navbar />
-    <main>
-      {children}
-    </main>
-  </div>
-);
+import { useLocation } from 'react-router-dom';
+
+const AppLayout = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1 relative overflow-y-auto">
+        {children}
+      </main>
+    </div>
+  );
+};
 
 export function App() {
   return (

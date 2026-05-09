@@ -1,5 +1,6 @@
 import { transferLockedBalance } from "./balance.service";
 import { broadcast, sendToUser } from "../ws";
+import { recordTrade } from "./tracker.service";
 
 export interface Order {
   id: string;
@@ -43,6 +44,10 @@ export const fillOrders = async (
       // The buyer locked funds when putting the order, we transfer those to the seller.
       await transferLockedBalance(userId, ask.userId, matchedQty * ask.price);
 
+      // Record in positions & trade history tracker
+      recordTrade(userId, ticker, side, "BUY", ask.price, matchedQty);
+      recordTrade(ask.userId, ticker, side, "SELL", ask.price, matchedQty);
+
       // Broadcast TRADE and user updates
       broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price: ask.price, quantity: matchedQty, side, timestamp: Date.now() });
       sendToUser(userId, { type: "ORDER_FILLED", side, price: ask.price, filledQuantity: matchedQty });
@@ -73,6 +78,10 @@ export const fillOrders = async (
       // Transfer from buyer (bid.userId) to seller (userId)
       // The buyer locked funds when putting their bid, we transfer those to the seller.
       await transferLockedBalance(bid.userId, userId, matchedQty * price);
+
+      // Record in positions & trade history tracker
+      recordTrade(userId, ticker, side, "SELL", price, matchedQty); // The seller executing
+      recordTrade(bid.userId, ticker, side, "BUY", price, matchedQty); // The buyer providing liquidity 
 
       // Broadcast TRADE and user updates
       broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price, quantity: matchedQty, side, timestamp: Date.now() });

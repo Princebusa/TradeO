@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
 import jwt from "jsonwebtoken";
+import { orderbook } from "./service/orderbook.service";
 
 interface WsMessage {
   method: "SUBSCRIBE" | "UNSUBSCRIBE" | "AUTH";
@@ -33,6 +34,25 @@ export const initWsServer = (server: Server) => {
             }
             topicSockets.get(topic)!.add(ws);
             myTopics.add(topic);
+
+            // Immediate Push: If subscribing to an orderbook, send current state
+            if (topic.startsWith("orderbook:")) {
+              const ticker = topic.split(":")[1];
+              const tickerBook = orderbook[ticker];
+              if (tickerBook) {
+                // Send both sides immediately
+                ["YES", "NO"].forEach((side) => {
+                  const book = tickerBook[side as "YES" | "NO"];
+                  ws.send(JSON.stringify({
+                    type: "DEPTH",
+                    ticker,
+                    side,
+                    bids: book.bids,
+                    asks: book.asks
+                  }));
+                });
+              }
+            }
           });
         } 
         else if (message.method === "UNSUBSCRIBE" && message.params) {

@@ -14,21 +14,22 @@ export const useWebSocket = (topics: string[]) => {
 
   useEffect(() => {
     // Initialize WebSocket
-    ws.current = new WebSocket("ws://localhost:3300");
+    const socket = new WebSocket("ws://localhost:3300");
+    ws.current = socket;
 
-    ws.current.onopen = () => {
+    socket.onopen = () => {
       setIsConnected(true);
-      // Authenticate if token exists
-      if (token) {
-        ws.current?.send(JSON.stringify({ method: "AUTH", token }));
+      // Authenticate if token exists and socket is open
+      if (token && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ method: "AUTH", token }));
       }
-      // Subscribe to topics
-      if (topics.length > 0) {
-        ws.current?.send(JSON.stringify({ method: "SUBSCRIBE", params: topics }));
+      // Subscribe to topics if socket is open
+      if (topics.length > 0 && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ method: "SUBSCRIBE", params: topics }));
       }
     };
 
-    ws.current.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         setMessages((prev) => [...prev.slice(-50), data]); // Keep last 50 messages
@@ -37,16 +38,18 @@ export const useWebSocket = (topics: string[]) => {
       }
     };
 
-    ws.current.onclose = () => {
+    socket.onclose = () => {
       setIsConnected(false);
     };
 
     return () => {
-      if (ws.current?.readyState === WebSocket.OPEN) {
+      if (socket.readyState === WebSocket.OPEN) {
         if (topics.length > 0) {
-          ws.current.send(JSON.stringify({ method: "UNSUBSCRIBE", params: topics }));
+          socket.send(JSON.stringify({ method: "UNSUBSCRIBE", params: topics }));
         }
-        ws.current.close();
+        socket.close();
+      } else if (socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
       }
     };
   }, [token, JSON.stringify(topics)]);

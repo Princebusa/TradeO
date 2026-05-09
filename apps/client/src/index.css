@@ -6,55 +6,80 @@
   --color-accent: #F59E0B; /* Amber 500 */
   --color-success: #10B981; /* Emerald 500 */
   --color-danger: #F43F5E; /* Rose 500 */
-  --color-dark: #0F172A; /* Slate 900 */
-  --color-light: #F8FAFC; /* Slate 50 */
+  --color-dark: #FFFFFF; /* White */
+  --color-light: #000000; /* Black */
   
-  --shadow-modern: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-modern: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
   --shadow-modern-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 body {
-  @apply bg-light text-dark;
-  font-family: 'Inter', sans-serif;
+  @apply bg-slate-50 text-slate-900;
+  font-family: 'Mulish', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Updated Utility Classes with Modern Styling */
+/* Professional Terminal Utility Classes */
 .brutal-box {
   @apply bg-white border border-slate-200 rounded-2xl;
   box-shadow: var(--shadow-modern);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .brutal-box:hover {
+  @apply border-slate-300;
   box-shadow: var(--shadow-modern-lg);
   transform: translateY(-2px);
 }
 
 .brutal-button {
-  @apply bg-primary text-white font-semibold py-2 px-6 rounded-xl cursor-pointer transition-all duration-200;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  @apply bg-slate-900 text-white font-bold py-3 px-8 rounded-xl cursor-pointer transition-all duration-200 capitalize tracking-wide text-sm;
 }
 
 .brutal-button:hover {
-  @apply brightness-110 -translate-y-0.5;
-  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+  @apply bg-slate-800 border-slate-900 shadow-md;
+  transform: translateY(-1px);
 }
 
 .brutal-button:active {
-  @apply translate-y-0 brightness-100;
+  @apply translate-y-0 brightness-90;
 }
 
 .brutal-input {
-  @apply border border-slate-200 p-3 bg-white rounded-xl outline-none transition-all duration-200;
-}
-
-.brutal-input:focus {
-  @apply border-primary ring-4 ring-primary/10 bg-white;
+  @apply border border-slate-300 p-4 bg-white text-slate-900 rounded-xl outline-none transition-all duration-200 focus:border-slate-500;
 }
 
 /* Layout helpers */
 .glass-panel {
-  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  @apply bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl;
+}
+
+/* Terminal specific utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.terminal-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.terminal-scroll::-webkit-scrollbar-track {
+  @apply bg-black;
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20;
+}
+
+/* Animations */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
