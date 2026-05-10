@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { fetchApi } from "../lib/api";
@@ -19,6 +19,7 @@ export const MarketDetailPage = () => {
   const [openOrders, setOpenOrders] = useState<Order[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
+  const [prices, setPrices] = useState({ YES: 0, NO: 0 });
   const [activeTab, setActiveTab] = useState<"positions" | "openOrders" | "orderHistory" | "tradeHistory">("positions");
   const [marketInfo, setMarketInfo] = useState<{ title: string; volume: string; chance: string } | null>(null);
   
@@ -39,6 +40,13 @@ export const MarketDetailPage = () => {
       fetchApi(`/order/book/${ticker}`).then((data) => {
         setBids(data[orderSide]?.bids || []);
         setAsks(data[orderSide]?.asks || []);
+        
+        const activePrices = { YES: 0, NO: 0 };
+        if (data.YES?.bids?.length) activePrices.YES = data.YES.bids[0].price;
+        else if (data.YES?.asks?.length) activePrices.YES = data.YES.asks[0].price;
+        if (data.NO?.bids?.length) activePrices.NO = data.NO.bids[0].price;
+        else if (data.NO?.asks?.length) activePrices.NO = data.NO.asks[0].price;
+        setPrices(activePrices);
       }).catch(console.error);
 
       // Fetch market details
@@ -59,17 +67,46 @@ export const MarketDetailPage = () => {
 
   // Update book from WS
   useEffect(() => {
-    const latestDepth = [...messages].reverse().find(m => 
-      m.type === "DEPTH" && 
-      m.ticker === ticker && 
-      m.side === orderSide
-    ) as (DepthMsg & { side: string }) | undefined;
+    const latestYesDepth = [...messages].reverse().find(m => m.type === "DEPTH" && m.ticker === ticker && m.side === "YES") as (DepthMsg & { side: string }) | undefined;
+    const latestNoDepth = [...messages].reverse().find(m => m.type === "DEPTH" && m.ticker === ticker && m.side === "NO") as (DepthMsg & { side: string }) | undefined;
 
-    if (latestDepth) {
-      setBids(latestDepth.bids || []);
-      setAsks(latestDepth.asks || []);
+    if (latestYesDepth || latestNoDepth) {
+      const activeSideDepth = orderSide === "YES" ? latestYesDepth : latestNoDepth;
+      if (activeSideDepth) {
+        setBids(activeSideDepth.bids || []);
+        setAsks(activeSideDepth.asks || []);
+      }
+
+      setPrices(prev => {
+        const newPrices = { ...prev };
+        if (latestYesDepth) {
+           if (latestYesDepth.bids?.length) newPrices.YES = latestYesDepth.bids[0].price;
+           else if (latestYesDepth.asks?.length) newPrices.YES = latestYesDepth.asks[0].price;
+        }
+        if (latestNoDepth) {
+           if (latestNoDepth.bids?.length) newPrices.NO = latestNoDepth.bids[0].price;
+           else if (latestNoDepth.asks?.length) newPrices.NO = latestNoDepth.asks[0].price;
+        }
+        return newPrices;
+      });
     }
   }, [messages, ticker, orderSide]);
+
+  const refreshData = useCallback(() => {
+    fetchApi("/order/open").then(setOpenOrders).catch(console.error);
+    fetchApi("/order/balance").then(setBalance).catch(console.error);
+    fetchApi("/order/positions").then(setPositions).catch(console.error);
+    fetchApi("/order/history/trades").then(setTradeHistory).catch(console.error);
+  }, []);
+
+  // WS notifies this user on fills; HTTP POST only refreshes the account that placed the order.
+  useEffect(() => {
+    if (!isAuthenticated || messages.length === 0) return;
+    const last = messages[messages.length - 1] as { type?: string };
+    if (last?.type === "ORDER_FILLED") {
+      refreshData();
+    }
+  }, [messages, isAuthenticated, refreshData]);
 
   const placeOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,13 +161,6 @@ export const MarketDetailPage = () => {
     } catch (err: any) {
       alert(err.message || "Failed to edit order");
     }
-  };
-
-  const refreshData = () => {
-    fetchApi("/order/open").then(setOpenOrders).catch(console.error);
-    fetchApi("/order/balance").then(setBalance).catch(console.error);
-    fetchApi("/order/positions").then(setPositions).catch(console.error);
-    fetchApi("/order/history/trades").then(setTradeHistory).catch(console.error);
   };
 
   const currentPrice = useMemo(() => {
@@ -267,23 +297,51 @@ export const MarketDetailPage = () => {
                           <th className="pb-4 px-3">Avg Entry</th>
                           <th className="pb-4 px-3">Mark Price</th>
                           <th className="pb-4 px-3 text-right">Unrealized PnL</th>
+                          <th className="pb-4 px-3 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="text-slate-700">
                         {positions.map((p, i) => {
-                           const markPrice = currentPrice; // Approximating using spread midpoint or current order book touch price.
+                           const markPrice = prices[p.side as "YES" | "NO"] || 0;
+                           const isShort = p.shares < 0;
+                           const qty = Math.abs(p.shares);
                            const pnl = (markPrice - p.avgPrice) * p.shares;
                            return (
                              <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                <td className="py-4 px-3 font-bold text-slate-900">{p.ticker}</td>
                                <td className="py-4 px-3">
                                  <span className={`px-2 py-1 rounded text-xs font-bold capitalize ${p.side === 'YES' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{p.side.toLowerCase()}</span>
+                                 {isShort ? <span className="ml-2 px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-800">Short</span> : null}
                                </td>
-                               <td className="py-4 px-3">{p.shares}</td>
+                               <td className="py-4 px-3">{isShort ? `-${qty}` : qty}</td>
                                <td className="py-4 px-3 text-slate-500">${p.avgPrice.toFixed(2)}</td>
                                <td className="py-4 px-3 text-slate-900">${markPrice.toFixed(2)}</td>
                                <td className={`py-4 px-3 text-right font-bold tracking-tight ${pnl >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
                                  {pnl >= 0 ? "+" : "-"}${Math.abs(pnl).toFixed(2)}
+                               </td>
+                               <td className="py-4 px-3 text-right">
+                                 <button onClick={async () => {
+                                   const msg = isShort
+                                     ? `Market buy to cover your short ${qty} ${p.side} shares?`
+                                     : `Market sell to close your ${qty} ${p.side} shares?`;
+                                   if (confirm(msg)) {
+                                     try {
+                                       await fetchApi("/order", {
+                                         method: "POST",
+                                         body: JSON.stringify({
+                                           side: p.side,
+                                           type: isShort ? "BUY" : "SELL",
+                                           price: isShort ? 0.99 : 0.01,
+                                           quantity: qty,
+                                           ticker: p.ticker,
+                                         }),
+                                       });
+                                       refreshData();
+                                     } catch (err: any) {
+                                       alert(err.message);
+                                     }
+                                   }
+                                 }} className="text-slate-500 hover:text-slate-900 transition-colors font-bold text-xs uppercase underline">Exit</button>
                                </td>
                              </tr>
                            );

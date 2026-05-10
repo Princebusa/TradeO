@@ -5,7 +5,6 @@ import { fillOrders } from "../service/fillorder";
 import type { Order } from "../service/fillorder";
 import { broadcast } from "../ws";
 import { getPositionsForUser, getTradeHistoryForUser } from "../service/tracker.service";
-
 import { orderbook, getTickerBook } from "../service/orderbook.service";
 
 const generateId = () => Math.random().toString(36).substring(7);
@@ -42,6 +41,11 @@ export const order = async (req: Request, res: Response): Promise<void> => {
 
     if (!side || !price || !type || !quantity || !userId || !ticker) {
       res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0 || price <= 0) {
+      res.status(400).json({ error: "Invalid price or quantity" });
       return;
     }
 

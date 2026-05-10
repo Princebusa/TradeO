@@ -50,21 +50,41 @@ export const recordTrade = (
     timestamp: Date.now(),
   });
 
-  // 2. Update position
+  // 2. Update position (signed shares: positive = long, negative = short)
   initPosition(userId, ticker);
   const pos = positions[userId]![ticker]![side];
-  
+
   if (type === "BUY") {
-    pos.shares += quantity;
-    pos.spent += price * quantity;
+    if (pos.shares < 0) {
+      const shortSize = -pos.shares;
+      const coverQty = Math.min(quantity, shortSize);
+      const avgShort = pos.spent / shortSize;
+      pos.shares += coverQty;
+      pos.spent -= avgShort * coverQty;
+      const remainder = quantity - coverQty;
+      if (remainder > 0) {
+        pos.shares += remainder;
+        pos.spent += price * remainder;
+      }
+    } else {
+      pos.shares += quantity;
+      pos.spent += price * quantity;
+    }
   } else {
     // SELL
     if (pos.shares > 0) {
-      const avgPrice = pos.spent / pos.shares;
-      const matchedShares = Math.min(pos.shares, quantity);
-      
-      pos.shares -= matchedShares;
-      pos.spent -= avgPrice * matchedShares;
+      const avgLong = pos.spent / pos.shares;
+      const closeLongQty = Math.min(pos.shares, quantity);
+      pos.shares -= closeLongQty;
+      pos.spent -= avgLong * closeLongQty;
+      const openShortQty = quantity - closeLongQty;
+      if (openShortQty > 0) {
+        pos.shares -= openShortQty;
+        pos.spent += price * openShortQty;
+      }
+    } else {
+      pos.shares -= quantity;
+      pos.spent += price * quantity;
     }
   }
 };
@@ -78,20 +98,22 @@ export const getPositionsForUser = (userId: string) => {
     const YES = tickerPositions.YES;
     const NO = tickerPositions.NO;
     
-    if (YES.shares > 0) {
+    if (YES.shares !== 0) {
+      const abs = Math.abs(YES.shares);
       result.push({
         ticker,
         side: "YES",
         shares: YES.shares,
-        avgPrice: YES.spent / YES.shares,
+        avgPrice: YES.spent / abs,
       });
     }
-    if (NO.shares > 0) {
+    if (NO.shares !== 0) {
+      const abs = Math.abs(NO.shares);
       result.push({
         ticker,
         side: "NO",
         shares: NO.shares,
-        avgPrice: NO.spent / NO.shares,
+        avgPrice: NO.spent / abs,
       });
     }
   }

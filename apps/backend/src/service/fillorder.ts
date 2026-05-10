@@ -1,4 +1,4 @@
-import { transferLockedBalance } from "./balance.service";
+import { transferLockedBalance, releaseBalance } from "./balance.service";
 import { broadcast, sendToUser } from "../ws";
 import { recordTrade } from "./tracker.service";
 
@@ -30,6 +30,7 @@ export const fillOrders = async (
     for (let i = 0; i < asks.length; i++) {
       const ask = asks[i];
       if (!ask) continue;
+      if (ask.userId === userId) continue; // no self-trade
       if (ask.price > price) {
         break; // No more eligible asks
       }
@@ -40,18 +41,23 @@ export const fillOrders = async (
       ask.quantity -= matchedQty;
       remainingQuantity -= matchedQty;
 
-      // Transfer from buyer (userId) to seller (ask.userId)
-      // The buyer locked funds when putting the order, we transfer those to the seller.
-      await transferLockedBalance(userId, ask.userId, matchedQty * ask.price);
+      const execPrice = ask.price;
+
+      // Buyer reserved `limitPrice` per share; pay maker (execPrice) and return the rest from lock to balance.
+      await transferLockedBalance(userId, ask.userId, matchedQty * execPrice);
+      const rebate = (price - execPrice) * matchedQty;
+      if (rebate > 0) {
+        await releaseBalance(userId, rebate);
+      }
 
       // Record in positions & trade history tracker
-      recordTrade(userId, ticker, side, "BUY", ask.price, matchedQty);
-      recordTrade(ask.userId, ticker, side, "SELL", ask.price, matchedQty);
+      recordTrade(userId, ticker, side, "BUY", execPrice, matchedQty);
+      recordTrade(ask.userId, ticker, side, "SELL", execPrice, matchedQty);
 
       // Broadcast TRADE and user updates
-      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price: ask.price, quantity: matchedQty, side, timestamp: Date.now() });
-      sendToUser(userId, { type: "ORDER_FILLED", side, price: ask.price, filledQuantity: matchedQty });
-      sendToUser(ask.userId, { type: "ORDER_FILLED", orderId: ask.id, side, price: ask.price, filledQuantity: matchedQty });
+      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price: execPrice, quantity: matchedQty, side, timestamp: Date.now() });
+      sendToUser(userId, { type: "ORDER_FILLED", side, price: execPrice, filledQuantity: matchedQty });
+      sendToUser(ask.userId, { type: "ORDER_FILLED", orderId: ask.id, side, price: execPrice, filledQuantity: matchedQty });
 
       if (ask.quantity === 0) {
         asks.splice(i, 1);
@@ -65,6 +71,7 @@ export const fillOrders = async (
     for (let i = 0; i < bids.length; i++) {
       const bid = bids[i];
       if (!bid) continue;
+      if (bid.userId === userId) continue; // no self-trade
       if (bid.price < price) {
         break; // No more eligible bids
       }
@@ -75,18 +82,17 @@ export const fillOrders = async (
       bid.quantity -= matchedQty;
       remainingQuantity -= matchedQty;
 
-      // Transfer from buyer (bid.userId) to seller (userId)
-      // The buyer locked funds when putting their bid, we transfer those to the seller.
-      await transferLockedBalance(bid.userId, userId, matchedQty * price);
+      // Maker bid price is the execution price; buyer locked bid.price per share.
+      const execPrice = bid.price;
 
-      // Record in positions & trade history tracker
-      recordTrade(userId, ticker, side, "SELL", price, matchedQty); // The seller executing
-      recordTrade(bid.userId, ticker, side, "BUY", price, matchedQty); // The buyer providing liquidity 
+      await transferLockedBalance(bid.userId, userId, matchedQty * execPrice);
 
-      // Broadcast TRADE and user updates
-      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price, quantity: matchedQty, side, timestamp: Date.now() });
-      sendToUser(bid.userId, { type: "ORDER_FILLED", orderId: bid.id, side, price, filledQuantity: matchedQty });
-      sendToUser(userId, { type: "ORDER_FILLED", side, price, filledQuantity: matchedQty });
+      recordTrade(userId, ticker, side, "SELL", execPrice, matchedQty);
+      recordTrade(bid.userId, ticker, side, "BUY", execPrice, matchedQty);
+
+      broadcast(`trades:${ticker}`, { type: "TRADE", ticker, price: execPrice, quantity: matchedQty, side, timestamp: Date.now() });
+      sendToUser(bid.userId, { type: "ORDER_FILLED", orderId: bid.id, side, price: execPrice, filledQuantity: matchedQty });
+      sendToUser(userId, { type: "ORDER_FILLED", side, price: execPrice, filledQuantity: matchedQty });
 
       if (bid.quantity === 0) {
         bids.splice(i, 1);
